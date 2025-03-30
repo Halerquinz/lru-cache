@@ -279,6 +279,6 @@ func (c *lru) updateSizeOnDelete(key any) {
 }
 
 func (c *lru) isEntryExpired(entry *entryImpl, currentTime time.Time) bool {
-	// entry.createTime must not be Zero because the default value of time.Time is Zero.
+	// entry.createTime must not be zero because the default value of time.Time is zero when the cache is not configured with TTL.
 	return entry.refCount == 0 && !entry.createTime.IsZero() && currentTime.After(entry.createTime.Add(c.ttl))
 }
