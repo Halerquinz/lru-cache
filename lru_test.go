@@ -171,4 +171,38 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 	for k, v := range values {
 		cache.Put(k, v)
 	}
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+
+	for range 20 {
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			<-start
+
+			for range 1000 {
+				cache.Get("A")
+				cache.Put("A", "A")
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			<-start
+
+			for range 100 {
+				var result []Entry
+				it := cache.Iterator()
+				for it.HasNext() {
+					next := it.Next()
+					result = append(result, next) // nolint:staticcheck
+				}
+				it.Close()
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
 }
