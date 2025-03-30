@@ -7,7 +7,7 @@ type Cache interface {
 	// Get retrieves the value associated with the given key
 	Get(key any) any
 
-	// Put adds a key-value pair to the cache
+	// Put adds a key-value pair to the cache return value
 	Put(key any, value any) any
 
 	// PutIfNotExist adds a key-value pair to the cache if the key does not already exist
@@ -31,21 +31,26 @@ type Options struct {
 	// TTL specifies the time-to-live duration for cache entries
 	TTL time.Duration
 
-	// InitializeCapacity sets the initial capacity of the cache
-	InitializeCapacity int
+	// InitialCapacity sets the initial capacity of the cache
+	InitialCapacity int
 
 	// Pin indicates whether the cache entries should be pinned (not evicted)
 	Pin bool
 
-	// RemoveFunc is a callback function that is called when an entry is removed from the cache
-	RemoveFunc RemoveFunc
+	// MaxSize defines the maximum number of entries the cache can hold
+	MaxSize int
 
-	// TineNow is a function that returns the current time, used for TTL calculations
-	TineNow func() time.Time
+	// SizeFunc is a function to calculate the size of a cache item
+	SizeFunc GetCacheItemSizeFunc
+
+	// ActivelyEvict determines whether the cache should actively evict entries
+	ActivelyEvict bool
+
+	// TimeNow is a function that returns the current time, used for TTL calculations
+	TimeNow func() time.Time
 }
 
-// RemoveFunc is a callback function type for removed cache entries
-type RemoveFunc func(any)
+type GetCacheItemSizeFunc func(any) uint64
 
 // Iterator is the interface for iterating over cache entries
 type Iterator interface {
