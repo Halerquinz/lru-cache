@@ -7,8 +7,10 @@ import (
 	"time"
 )
 
+// ErrCacheFull is returned when the cache is full and cannot accept more entries
 var ErrCacheFull = errors.New("cache is full")
 
+// lru implements a Least Recently Used cache
 type lru struct {
 	mu            sync.Mutex
 	byKey         map[any]*list.Element
@@ -22,6 +24,7 @@ type lru struct {
 	TimeNow       func() time.Time
 }
 
+// entryImpl represents a cache entry implementation
 type entryImpl struct {
 	key        any
 	value      any
@@ -29,22 +32,29 @@ type entryImpl struct {
 	refCount   int
 }
 
+// Key returns the key of the cache entry
 func (e *entryImpl) Key() any { return e.key }
 
+// Value returns the value of the cache entry
 func (e *entryImpl) Value() any { return e.value }
 
+// CreateTime returns the creation time of the cache entry
 func (e *entryImpl) CreateTime() time.Time { return e.createTime }
 
+// iteratorImpl implements the Iterator interface for the LRU cache
 type iteratorImpl struct {
 	lru        *lru
 	nextItem   *list.Element
 	createTime time.Time
 }
 
+// Close releases the lock on the LRU cache
 func (it *iteratorImpl) Close() { it.lru.mu.Unlock() }
 
+// HasNext checks if there are more entries to iterate over
 func (it *iteratorImpl) HasNext() bool { return it.nextItem != nil }
 
+// Next returns the next cache entry
 func (it *iteratorImpl) Next() Entry {
 	if it.nextItem == nil {
 		panic("LRU cache iterator Next called when there is no next item")
@@ -62,6 +72,7 @@ func (it *iteratorImpl) Next() Entry {
 	return entry
 }
 
+// prepareNext prepares the next valid item for iteration
 func (it *iteratorImpl) prepareNext() {
 	for it.nextItem != nil {
 		entry := it.nextItem.Value.(*entryImpl)
@@ -74,6 +85,8 @@ func (it *iteratorImpl) prepareNext() {
 		}
 	}
 }
+
+// Iterator returns an iterator for the cache entries
 func (c *lru) Iterator() Iterator {
 	c.mu.Lock()
 	iterator := &iteratorImpl{
@@ -85,6 +98,7 @@ func (c *lru) Iterator() Iterator {
 	return iterator
 }
 
+// New creates a new LRU cache with the given options
 func New(opts *Options) Cache {
 	if opts == nil {
 		opts = &Options{}
@@ -104,6 +118,7 @@ func New(opts *Options) Cache {
 	}
 }
 
+// Get retrieves the value associated with the given key
 func (c *lru) Get(key any) any {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -128,6 +143,7 @@ func (c *lru) Get(key any) any {
 	return entry.value
 }
 
+// Put adds a key-value pair to the cache and returns the previous value if it existed
 func (c *lru) Put(key any, value any) any {
 	if c.pin {
 		panic("Can not put if pin")
@@ -136,6 +152,7 @@ func (c *lru) Put(key any, value any) any {
 	return val
 }
 
+// PutIfNotExist adds a key-value pair to the cache if the key does not already exist
 func (c *lru) PutIfNotExist(key any, value any) (any, error) {
 	existing, err := c.putInternal(key, value, false)
 	if err != nil {
@@ -147,6 +164,7 @@ func (c *lru) PutIfNotExist(key any, value any) (any, error) {
 	return existing, nil
 }
 
+// Delete removes the entry associated with the given key
 func (c *lru) Delete(key any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -158,6 +176,7 @@ func (c *lru) Delete(key any) {
 	}
 }
 
+// Release decrements the reference count for the entry associated with the given key
 func (c *lru) Release(key any) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -171,6 +190,7 @@ func (c *lru) Release(key any) {
 	entry.refCount--
 }
 
+// Size returns the number of entries in the cache
 func (c *lru) Size() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -178,6 +198,7 @@ func (c *lru) Size() int {
 	return len(c.byKey)
 }
 
+// putInternal handles the internal logic for adding or updating cache entries
 func (c *lru) putInternal(key any, value any, allowUpdate bool) (any, error) {
 	valueSize := uint64(0)
 	c.mu.Lock()
@@ -244,10 +265,12 @@ func (c *lru) putInternal(key any, value any, allowUpdate bool) (any, error) {
 	return nil, nil
 }
 
+// isCacheFull checks if the cache has reached its maximum size
 func (c *lru) isCacheFull() bool {
 	return len(c.byKey) > c.maxSize
 }
 
+// evictExpiredItems removes expired entries from the cache
 func (c *lru) evictExpiredItems() {
 	if !c.activelyEvict {
 		return
@@ -262,22 +285,26 @@ func (c *lru) evictExpiredItems() {
 	}
 }
 
+// deleteInternal removes an element from the cache
 func (c *lru) deleteInternal(element *list.Element) {
 	entry := c.byAccess.Remove(element).(*entryImpl)
 	delete(c.byKey, entry.key)
 	c.updateSizeOnDelete(entry.key)
 }
 
+// updateSizeOnAdd updates the cache size when adding an entry
 func (c *lru) updateSizeOnAdd(key any, valueSize uint64) {
 	c.currSize += uint64(valueSize)
 	c.sizeByKey[key] = valueSize
 }
 
+// updateSizeOnDelete updates the cache size when deleting an entry
 func (c *lru) updateSizeOnDelete(key any) {
 	c.currSize -= uint64(c.sizeByKey[key])
 	delete(c.sizeByKey, key)
 }
 
+// isEntryExpired checks if a cache entry has expired
 func (c *lru) isEntryExpired(entry *entryImpl, currentTime time.Time) bool {
 	// entry.createTime must not be zero because the default value of time.Time is zero when the cache is not configured with TTL.
 	return entry.refCount == 0 && !entry.createTime.IsZero() && currentTime.After(entry.createTime.Add(c.ttl))
