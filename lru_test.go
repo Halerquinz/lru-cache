@@ -206,3 +206,37 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 	close(start)
 	wg.Wait()
 }
+
+func TestRace(t *testing.T) {
+	t.Parallel()
+
+	const parallel = 100
+	var finish sync.WaitGroup
+	var start sync.WaitGroup
+	finish.Add(parallel)
+	start.Add(parallel + 1)
+
+	cache := New(&Options{MaxSize: 5})
+	cache.Put("A", 1)
+
+	for i := 0; i < parallel; i++ {
+		// This avoids a potential race condition on the loop variable `i` in Go versions before 1.22
+		// This behavior was fixed in Go 1.22 (see https://tip.golang.org/doc/go1.22).
+		i := i
+		go func() {
+			defer finish.Done()
+			start.Done()
+			start.Wait() // contention
+			if i%2 == 0 {
+				cache.Get("A")
+				cache.Put("A", 2)
+			} else {
+				cache.Put("A", 3)
+				cache.Get("A")
+			}
+		}()
+	}
+
+	start.Done()
+	finish.Wait()
+}
